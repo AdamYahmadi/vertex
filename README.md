@@ -46,7 +46,7 @@ PDF Export
 Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/vertex.git
+git clone https://github.com/AdamYahmadi/vertex.git
 cd vertex
 ```
 
