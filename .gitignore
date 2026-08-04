@@ -1,5 +1,5 @@
+vertex.egg-info/
 # --- Project Files ---
-structure.md
 *.pdf
 *.jpg
 *.png
@@ -109,3 +109,4 @@ marimo/_lsp/
 __marimo__/
 .streamlit/secrets.toml
 tempCodeRunnerFile.py
+.DS_Store

@@ -1,3 +1,4 @@
+docaligner-docsaid
 opencv-python
 scikit-image
 numpy

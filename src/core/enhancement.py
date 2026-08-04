@@ -1,52 +1,82 @@
 import cv2
 import numpy as np
 
-def enhance_document(image: np.ndarray) -> np.ndarray:
+
+def _trim_background(
+    image: np.ndarray,
+    paper_v: int = 150,
+    paper_s: int = 65,
+    need: float = 0.55,
+    max_frac: float = 0.15,
+) -> np.ndarray:
     """
-    Enhances a document image to simulate a clean, high-contrast scanner output.
+    Crops leftover background from around the paper after warping.
+    Works by scanning inward from each of the four edges and stopping at the
+    first row/column that is mostly white paper.
+    """
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    S, V = hsv[:, :, 1], hsv[:, :, 2]
+    paper = ((V > paper_v) & (S < paper_s)).astype(np.float32)
 
-    Args:
-        image (np.ndarray): The input color image in BGR format.
+    col, row = paper.mean(axis=0), paper.mean(axis=1)
+    h, w = image.shape[:2]
 
-    Returns:
-        np.ndarray: The enhanced document image in BGR format.
+    def first(arr, limit):
+        """Index of the first row/column that is mostly paper."""
+        for i, val in enumerate(arr):
+            if val >= need:
+                return i
+            if i >= limit:
+                break
+        return 0
+
+    left = first(col, int(w * max_frac))
+    right = first(col[::-1], int(w * max_frac))
+    top = first(row, int(h * max_frac))
+    bottom = first(row[::-1], int(h * max_frac))
+
+    return image[top : h - bottom, left : w - right]
+
+
+def enhance_document(image: np.ndarray, trim: bool = True) -> np.ndarray:
+    """
+    Turns a photographed document into a clean printer-scan look:
+    trims leftover background, evens out lighting, forces a pure-white page, and sharpens the ink.
     """
     if len(image.shape) != 3:
         raise ValueError("This function requires a color BGR image.")
 
+    if trim:
+        image = _trim_background(image)
+
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    small_gray = cv2.resize(gray, None, fx=0.25, fy=0.25)
-    
+
+    small = cv2.resize(gray, None, fx=0.25, fy=0.25)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-    bg_small = cv2.morphologyEx(small_gray, cv2.MORPH_DILATE, kernel)
-    bg_small = cv2.medianBlur(bg_small, 21)
-    
-    bg = cv2.resize(bg_small, (gray.shape[1], gray.shape[0]))
-    
+    bg = cv2.morphologyEx(small, cv2.MORPH_DILATE, kernel)
+    bg = cv2.medianBlur(bg, 21)
+    bg = cv2.resize(bg, (gray.shape[1], gray.shape[0]))
     norm = cv2.divide(gray, bg, scale=255)
 
-    close_kernel = np.ones((2, 2), np.uint8)
-    norm = cv2.morphologyEx(norm, cv2.MORPH_CLOSE, close_kernel)
-    
     norm = norm.astype(np.float32)
-    norm = (norm - 15) * (255.0 / (210 - 15))
+    black_pt, white_pt = 25, 200
+    norm = (norm - black_pt) * (255.0 / (white_pt - black_pt))
     norm = np.clip(norm, 0, 255).astype(np.uint8)
 
-    src_gray = gray.astype(np.float32) 
-    src_gray = np.where(src_gray < 1, 1, src_gray) 
-    
-    gain = norm.astype(np.float32) / src_gray
-    gain = gain[:, :, np.newaxis]
-    
-    color = image.astype(np.float32) * gain
-    color = np.clip(color, 0, 255).astype(np.uint8)
-    
-    hsv = cv2.cvtColor(color, cv2.COLOR_BGR2HSV).astype(np.float32)
-    hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.3, 0, 255)
-    final_color = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
-    
-    final_color[norm > 245] = [255, 255, 255]
-    
-    final_color = cv2.bilateralFilter(final_color, d=5, sigmaColor=30, sigmaSpace=30)
-    
-    return final_color
+    paper = norm > 210
+    norm[paper] = 255
+
+    src = np.where(gray < 1, 1, gray).astype(np.float32)
+    gain = (norm.astype(np.float32) / src)[:, :, None]
+    out = np.clip(image.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+
+    hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV).astype(np.float32)
+    hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.35, 0, 255)
+    out = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    out[paper] = (255, 255, 255)
+
+    blur = cv2.GaussianBlur(out, (0, 0), 1.2)
+    out = cv2.addWeighted(out, 1.6, blur, -0.6, 0)
+
+    out = cv2.bilateralFilter(out, d=5, sigmaColor=25, sigmaSpace=25)
+    return out
