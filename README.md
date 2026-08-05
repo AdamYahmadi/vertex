@@ -85,7 +85,7 @@ vertex --help
 ## Usage
 
 ```bash
-# process a single image 
+# process a single image
 vertex document.jpg output/
 
 # process an entire directory of images
@@ -136,4 +136,5 @@ vertex/
 
 ## License
 
-Released under the MIT License. See [`LICENSE`](LICENSE) for details.
+Released under the MIT License.
+
