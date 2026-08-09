@@ -1,5 +1,9 @@
 docaligner-docsaid
-opencv-python
+opencv-python-headless
 scikit-image
 numpy
 img2pdf
+
+fastapi
+uvicorn[standard]
+python-multipart
