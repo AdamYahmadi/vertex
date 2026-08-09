@@ -8,7 +8,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ALLOWED_ORIGINS
-        value: "*"
+        value: https://vertex-web-p5hy.onrender.com
       - key: MAX_UPLOAD_MB
         value: "15"
 
@@ -20,7 +20,7 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
-        value: https://vertex-api.onrender.com/scan
+        value: https://vertex-api-30ex.onrender.com/scan
     routes:
       - type: rewrite
         source: /*
