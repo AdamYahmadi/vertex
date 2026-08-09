@@ -9,20 +9,13 @@ def _trim_background(
     need: float = 0.55,
     max_frac: float = 0.15,
 ) -> np.ndarray:
-    """
-    Crops leftover background from around the paper after warping.
-    Works by scanning inward from each of the four edges and stopping at the
-    first row/column that is mostly white paper.
-    """
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     S, V = hsv[:, :, 1], hsv[:, :, 2]
     paper = ((V > paper_v) & (S < paper_s)).astype(np.float32)
-
     col, row = paper.mean(axis=0), paper.mean(axis=1)
     h, w = image.shape[:2]
 
     def first(arr, limit):
-        """Index of the first row/column that is mostly paper."""
         for i, val in enumerate(arr):
             if val >= need:
                 return i
@@ -34,23 +27,16 @@ def _trim_background(
     right = first(col[::-1], int(w * max_frac))
     top = first(row, int(h * max_frac))
     bottom = first(row[::-1], int(h * max_frac))
-
     return image[top : h - bottom, left : w - right]
 
 
 def enhance_document(image: np.ndarray, trim: bool = True) -> np.ndarray:
-    """
-    Turns a photographed document into a clean printer-scan look:
-    trims leftover background, evens out lighting, forces a pure-white page, and sharpens the ink.
-    """
     if len(image.shape) != 3:
         raise ValueError("This function requires a color BGR image.")
-
     if trim:
         image = _trim_background(image)
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
     small = cv2.resize(gray, None, fx=0.25, fy=0.25)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
     bg = cv2.morphologyEx(small, cv2.MORPH_DILATE, kernel)
@@ -77,6 +63,5 @@ def enhance_document(image: np.ndarray, trim: bool = True) -> np.ndarray:
 
     blur = cv2.GaussianBlur(out, (0, 0), 1.2)
     out = cv2.addWeighted(out, 1.6, blur, -0.6, 0)
+    return cv2.bilateralFilter(out, d=5, sigmaColor=25, sigmaSpace=25)
 
-    out = cv2.bilateralFilter(out, d=5, sigmaColor=25, sigmaSpace=25)
-    return out
