@@ -604,6 +604,19 @@ export default function VertexScanner() {
               <p className="vx-ws-sub">
                 {items.length} added{doneCount ? ` · ${doneCount} scanned` : ""}
               </p>
+              <p
+                className="vx-ws-sub"
+                style={{
+                  marginTop: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  color: "var(--danger)",
+                }}
+              >
+                <AlertCircle size={13} strokeWidth={2} />
+                Images are downscaled because it's running on a free server.
+              </p>
             </div>
             <ol className="vx-stepper" aria-hidden="true">
               {["Upload", "Scan", "Download"].map((label, i) => (
@@ -915,3 +928,4 @@ const CSS = `
 }
 @media (prefers-reduced-motion:reduce){ .vx-spin{animation-duration:1.6s;} .vx-skel{animation:none;} .vx-btn,.vx-link,.vx-drop{transition:none;} }
 `;
+
