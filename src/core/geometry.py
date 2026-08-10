@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from docaligner import DocAligner
 
-_MODEL = DocAligner(model_cfg=os.getenv("DOCALIGNER_MODEL", "fastvit_t8"))
+_MODEL = DocAligner(model_cfg=os.getenv("DOCALIGNER_MODEL", "fastvit_sa24"))
 
 
 def get_document_contours(image: np.ndarray) -> np.ndarray:

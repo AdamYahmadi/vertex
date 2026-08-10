@@ -29,6 +29,7 @@ const GitHubIcon = ({ size = 14 }) => (
 const USE_MOCK = false;
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/scan";
 const MAX_SIDE = 1800;
+const IS_HOSTED = import.meta.env.VITE_HOSTED === "true";
 
 const SCAN_MESSAGES = {
   413: "That image is too large. Try a smaller photo.",
@@ -574,25 +575,27 @@ export default function VertexScanner() {
                 PNG, multiple allowed
               </p>
             </div>
-            <div className="vx-note">
-              <Info size={14} strokeWidth={2} className="vx-note-ic" />
-              <span>
-                Running on a free server, Vertex uses a lightweight detection
-                model and scales large images down to {MAX_SIDE}px for faster,
-                more reliable scanning. For best results, photograph the page
-                against a plain, uncluttered background. For full-resolution
-                scans and the most accurate model, run the{" "}
-                <a
-                  className="vx-note-link"
-                  href="https://github.com/AdamYahmadi/vertex"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  local version on GitHub
-                </a>
-                .
-              </span>
-            </div>
+            {IS_HOSTED && (
+              <div className="vx-note">
+                <Info size={14} strokeWidth={2} className="vx-note-ic" />
+                <span>
+                  Running on a free server, Vertex uses a lightweight detection
+                  model and scales large images down to {MAX_SIDE}px for faster,
+                  more reliable scanning. For best results, photograph the page
+                  against a plain, uncluttered background. For full-resolution
+                  scans and the most accurate model, run the{" "}
+                  <a
+                    className="vx-note-link"
+                    href="https://github.com/AdamYahmadi/vertex"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    local version on GitHub
+                  </a>
+                  .
+                </span>
+              </div>
+            )}
           </section>
 
           <section className="vx-sec" id="how">
