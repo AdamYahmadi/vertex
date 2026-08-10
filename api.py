@@ -17,6 +17,7 @@ logger = logging.getLogger("vertex")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 MAX_UPLOAD_MB = float(os.getenv("MAX_UPLOAD_MB", "15"))
 MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)
+MAX_IMAGE_SIDE = int(os.getenv("MAX_IMAGE_SIDE", "2000"))
 ALLOWED_TYPES = {"image/jpeg", "image/png"}
 
 processor: DocumentProcessor | None = None
@@ -83,6 +84,13 @@ async def scan(
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(400, "Could not decode that image.")
+
+    h, w = img.shape[:2]
+    if max(h, w) > MAX_IMAGE_SIDE:
+        scale = MAX_IMAGE_SIDE / max(h, w)
+        img = cv2.resize(
+            img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA
+        )
 
     try:
         result = processor.run(img)
