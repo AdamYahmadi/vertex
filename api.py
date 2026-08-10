@@ -17,7 +17,7 @@ logger = logging.getLogger("vertex")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 MAX_UPLOAD_MB = float(os.getenv("MAX_UPLOAD_MB", "15"))
 MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)
-MAX_IMAGE_SIDE = int(os.getenv("MAX_IMAGE_SIDE", "2000"))
+MAX_IMAGE_SIDE = int(os.getenv("MAX_IMAGE_SIDE", "1200"))
 ALLOWED_TYPES = {"image/jpeg", "image/png"}
 
 processor: DocumentProcessor | None = None
