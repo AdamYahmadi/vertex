@@ -8,49 +8,75 @@ import img2pdf
 from src.processor import DocumentProcessor
 from src.utils.io import load_image
 
+IMAGE_EXTS = (".jpg", ".jpeg", ".png")
+
+
+def collect_inputs(paths):
+    files = []
+    for path in paths:
+        if os.path.isdir(path):
+            for ext in ("*.jpg", "*.jpeg", "*.png"):
+                files.extend(glob.glob(os.path.join(path, ext)))
+        elif path.lower().endswith(IMAGE_EXTS):
+            files.append(path)
+        else:
+            print(f"Skipping unsupported input: {path}")
+    seen = set()
+    unique = []
+    for f in files:
+        if f not in seen:
+            seen.add(f)
+            unique.append(f)
+    unique.sort()
+    return unique
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Vertex Document Scanner")
-    parser.add_argument("input", help="Path to input image or folder")
-    parser.add_argument("output_dir", help="Path to output folder")
+    parser = argparse.ArgumentParser(
+        prog="vertex",
+        description="Vertex — turn photos of documents into clean, scanner-quality PDFs.",
+    )
+    parser.add_argument(
+        "inputs",
+        nargs="+",
+        help="One or more image files and/or folders, followed by the output folder.",
+    )
     args = parser.parse_args()
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    if len(args.inputs) < 2:
+        parser.error("Provide at least one input and an output folder.")
 
-    if os.path.isdir(args.input):
-        extensions = ["*.jpg", "*.jpeg", "*.png"]
-        input_files = []
-        for ext in extensions:
-            input_files.extend(glob.glob(os.path.join(args.input, ext)))
-        input_files.sort()
-    else:
-        input_files = [args.input]
+    *input_paths, output_dir = args.inputs
+    os.makedirs(output_dir, exist_ok=True)
 
+    input_files = collect_inputs(input_paths)
     if not input_files:
-        print("No images found in the specified path.")
+        print("No images found in the given path(s).")
         return
 
     processor = DocumentProcessor()
     print(f"Processing {len(input_files)} image(s)...")
 
+    ok_count = 0
     for input_path in input_files:
         img = load_image(input_path)
         if img is None:
+            print(f"Could not read: {input_path}")
             continue
-
         try:
             result = processor.run(img)
-
-            base_name = os.path.splitext(os.path.basename(input_path))[0]
-            output_path = os.path.join(args.output_dir, f"{base_name}.pdf")
-
-            with open(output_path, "wb") as f:
+            base = os.path.splitext(os.path.basename(input_path))[0]
+            out_path = os.path.join(output_dir, f"{base}.pdf")
+            with open(out_path, "wb") as f:
                 f.write(img2pdf.convert(cv2.imencode(".jpg", result)[1].tobytes()))
-
-            print(f"Saved: {output_path}")
-
+            print(f"Saved: {out_path}")
+            ok_count += 1
+        except ValueError:
+            print(f"No document detected in: {input_path}")
         except Exception as e:
             print(f"Error processing {input_path}: {e}")
+
+    print(f"Done. {ok_count}/{len(input_files)} succeeded.")
 
 
 if __name__ == "__main__":
