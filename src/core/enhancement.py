@@ -9,8 +9,8 @@ def _trim_background(
     need: float = 0.55,
     max_frac: float = 0.15,
 ) -> np.ndarray:
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    S, V = hsv[:, :, 1], hsv[:, :, 2]
+    H, S, V = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))
+    del H
     paper = ((V > paper_v) & (S < paper_s)).astype(np.float32)
     col, row = paper.mean(axis=0), paper.mean(axis=1)
     h, w = image.shape[:2]
@@ -46,15 +46,23 @@ def enhance_document(image: np.ndarray, trim: bool = True) -> np.ndarray:
 
     norm = norm.astype(np.float32)
     black_pt, white_pt = 25, 200
-    norm = (norm - black_pt) * (255.0 / (white_pt - black_pt))
-    norm = np.clip(norm, 0, 255).astype(np.uint8)
+    span = 255.0 / (white_pt - black_pt)
+    
+    norm -= black_pt
+    norm *= span
+    np.clip(norm, 0, 255, out=norm)
+    norm = norm.astype(np.uint8)
 
     paper = norm > 210
     norm[paper] = 255
 
     src = np.where(gray < 1, 1, gray).astype(np.float32)
     gain = (norm.astype(np.float32) / src)[:, :, None]
-    out = np.clip(image.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+    
+    image_f32 = image.astype(np.float32)
+    out_f32 = cv2.multiply(image_f32, gain)
+    out = np.clip(out_f32, 0, 255).astype(np.uint8)
+    del image_f32, out_f32
 
     hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.35, 0, 255)
@@ -64,4 +72,3 @@ def enhance_document(image: np.ndarray, trim: bool = True) -> np.ndarray:
     blur = cv2.GaussianBlur(out, (0, 0), 1.2)
     out = cv2.addWeighted(out, 1.6, blur, -0.6, 0)
     return cv2.bilateralFilter(out, d=5, sigmaColor=25, sigmaSpace=25)
-

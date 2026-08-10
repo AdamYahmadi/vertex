@@ -82,6 +82,8 @@ async def scan(
         raise HTTPException(413, f"Image too large. Limit is {MAX_UPLOAD_MB:.0f} MB.")
 
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    del data
+
     if img is None:
         raise HTTPException(400, "Could not decode that image.")
 
@@ -94,6 +96,7 @@ async def scan(
 
     try:
         result = processor.run(img)
+        del img
     except ValueError:
         raise HTTPException(
             422,
@@ -128,4 +131,3 @@ async def scan(
 @app.get("/")
 def root():
     return {"service": "vertex", "docs": "/docs", "health": "/health"}
-
