@@ -1,3 +1,4 @@
+import gc
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -116,6 +117,7 @@ async def scan(
     base = os.path.splitext(file.filename or "scan")[0]
 
     if fmt == "png":
+        gc.collect()
         return Response(
             content=buf.tobytes(),
             media_type="image/png",
@@ -123,6 +125,7 @@ async def scan(
         )
 
     pdf_bytes = img2pdf.convert(buf.tobytes())
+    gc.collect()
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
