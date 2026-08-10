@@ -11,6 +11,7 @@ import {
   FileDown,
   ArrowLeft,
   AlertCircle,
+  Info,
 } from "lucide-react";
 
 const GitHubIcon = ({ size = 14 }) => (
@@ -27,17 +28,38 @@ const GitHubIcon = ({ size = 14 }) => (
 
 const USE_MOCK = false;
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/scan";
+const MAX_SIDE = 1800;
+
+const SCAN_MESSAGES = {
+  413: "That image is too large. Try a smaller photo.",
+  415: "Unsupported file type. Please upload a JPG or PNG.",
+  422: "We couldn't find a document in that photo. Make sure the whole page is visible against a contrasting background, with even lighting.",
+  429: "Too many scans at once. Please wait a moment and try again.",
+  502: "The scanner is waking up or busy. Please try again in a few seconds.",
+  503: "The scanner is starting up. Please try again in a few seconds.",
+};
 
 async function scanDocument(file) {
   if (!USE_MOCK) {
     const form = new FormData();
     form.append("file", file);
     const sep = API_URL.includes("?") ? "&" : "?";
-    const res = await fetch(`${API_URL}${sep}fmt=png`, {
-      method: "POST",
-      body: form,
-    });
-    if (!res.ok) throw new Error(`Scan failed (${res.status})`);
+    let res;
+    try {
+      res = await fetch(`${API_URL}${sep}fmt=png`, { method: "POST", body: form });
+    } catch {
+      throw new Error("Couldn't reach the scanner. Check your connection and try again.");
+    }
+    if (!res.ok) {
+      let detail = "";
+      try {
+        detail = (await res.json())?.detail || "";
+      } catch {
+      }
+      throw new Error(
+        detail || SCAN_MESSAGES[res.status] || "Something went wrong while scanning. Please try again."
+      );
+    }
     return res.blob();
   }
   return mockScan(file);
@@ -552,6 +574,25 @@ export default function VertexScanner() {
                 PNG, multiple allowed
               </p>
             </div>
+            <div className="vx-note">
+              <Info size={14} strokeWidth={2} className="vx-note-ic" />
+              <span>
+                Running on a free server, Vertex uses a lightweight detection
+                model and scales large images down to {MAX_SIDE}px for faster,
+                more reliable scanning. For best results, photograph the page
+                against a plain, uncluttered background. For full-resolution
+                scans and the most accurate model, run the{" "}
+                <a
+                  className="vx-note-link"
+                  href="https://github.com/AdamYahmadi/vertex"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  local version on GitHub
+                </a>
+                .
+              </span>
+            </div>
           </section>
 
           <section className="vx-sec" id="how">
@@ -603,19 +644,6 @@ export default function VertexScanner() {
               <h1 className="vx-ws-h">Documents</h1>
               <p className="vx-ws-sub">
                 {items.length} added{doneCount ? ` · ${doneCount} scanned` : ""}
-              </p>
-              <p
-                className="vx-ws-sub"
-                style={{
-                  marginTop: "6px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  color: "var(--danger)",
-                }}
-              >
-                <AlertCircle size={13} strokeWidth={2} />
-                Images are downscaled because it's running on a free server.
               </p>
             </div>
             <ol className="vx-stepper" aria-hidden="true">
@@ -857,6 +885,9 @@ const CSS = `
 .vx-drop-t{font-size:15px; font-weight:550; color:var(--text); margin:0 0 5px;}
 .vx-drop-d{font-size:13.5px; color:var(--muted); margin:0;}
 .vx-drop-browse{color:var(--accent); font-weight:500;}
+.vx-note{display:flex; align-items:flex-start; gap:8px; max-width:760px; margin:14px auto 0; padding:10px 12px; font-size:12.5px; line-height:1.55; color:var(--danger); background:#FDF2F2; border:1px solid #F3C9C9; border-radius:8px;}
+.vx-note-ic{flex:none; margin-top:1px; color:var(--danger);}
+.vx-note-link{color:var(--danger); font-weight:600; text-decoration:underline; text-underline-offset:2px;}
 
 .vx-sec{padding-top:clamp(32px,5vw,48px); border-top:1px solid var(--border);}
 .vx-sec + .vx-sec{margin-top:clamp(32px,5vw,48px);}
@@ -928,4 +959,3 @@ const CSS = `
 }
 @media (prefers-reduced-motion:reduce){ .vx-spin{animation-duration:1.6s;} .vx-skel{animation:none;} .vx-btn,.vx-link,.vx-drop{transition:none;} }
 `;
-
