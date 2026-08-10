@@ -58,12 +58,14 @@ def enhance_document(image: np.ndarray, trim: bool = True) -> np.ndarray:
 
     src = np.where(gray < 1, 1, gray).astype(np.float32)
     gain = (norm.astype(np.float32) / src)[:, :, None]
-    
+    del src
+
     image_f32 = image.astype(np.float32)
-    image_f32 *= gain 
+    image_f32 *= gain
+    del gain
     np.clip(image_f32, 0, 255, out=image_f32)
     out = image_f32.astype(np.uint8)
-    del image_f32
+    del image_f32, image
 
     hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.35, 0, 255)

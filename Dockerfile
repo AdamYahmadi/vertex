@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PORT=8000
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
 EXPOSE 8000
 
 CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT}"]

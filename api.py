@@ -14,6 +14,8 @@ from src.processor import DocumentProcessor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vertex")
 
+cv2.setNumThreads(1)
+
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 MAX_UPLOAD_MB = float(os.getenv("MAX_UPLOAD_MB", "15"))
 MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)

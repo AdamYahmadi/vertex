@@ -1,6 +1,5 @@
 docaligner-docsaid
 opencv-python-headless
-scikit-image
 numpy
 img2pdf
 PyTurboJPEG<2.0
