@@ -1,8 +1,11 @@
+import os
+
 import cv2
 import numpy as np
 from docaligner import DocAligner
 
 _MODEL = DocAligner(model_cfg=os.getenv("DOCALIGNER_MODEL", "fastvit_t8"))
+
 
 def get_document_contours(image: np.ndarray) -> np.ndarray:
     if image is None or image.size == 0:
@@ -48,4 +51,3 @@ def warp_perspective(image: np.ndarray, points: np.ndarray) -> np.ndarray:
     )
     M = cv2.getPerspectiveTransform(rect, dst)
     return cv2.warpPerspective(image, M, (max_width, max_height))
-
