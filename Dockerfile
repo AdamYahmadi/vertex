@@ -12,6 +12,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+RUN python -c "from docaligner import DocAligner; DocAligner(model_cfg='fastvit_t8')"
+
 COPY . .
 
 ENV PORT=8000
