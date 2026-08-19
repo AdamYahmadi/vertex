@@ -643,23 +643,20 @@ export default function VertexScanner() {
       )}
 
       {view === "workspace" && (
-        <main className="vx-main">
-          <button className="vx-back" onClick={reset}>
-            <ArrowLeft size={15} strokeWidth={2} /> Back
-          </button>
-
-          <div className="vx-ws-top">
-            <div>
-              <h1 className="vx-ws-h">Documents</h1>
-              <p className="vx-ws-sub">
+        <main className="vx-main vx-main-ws">
+          <div className="vx-chrome">
+            <button className="vx-chrome-back" onClick={reset}>
+              <ArrowLeft size={13} strokeWidth={2} />
+              Documents
+              <span className="vx-chrome-count">
                 {items.length} added{doneCount ? ` · ${doneCount} scanned` : ""}
-              </p>
-            </div>
-            <ol className="vx-stepper" aria-hidden="true">
+              </span>
+            </button>
+            <ol className="vx-steps" aria-hidden="true">
               {["Upload", "Scan", "Download"].map((label, i) => (
                 <li
                   key={label}
-                  className={`vx-st ${i < stepIndex ? "done" : i === stepIndex ? "on" : ""}`}
+                  className={`vx-step ${i < stepIndex ? "done" : i === stepIndex ? "on" : ""}`}
                 >
                   {label}
                 </li>
@@ -670,29 +667,31 @@ export default function VertexScanner() {
           <div className="vx-list">
             {items.map((it) => (
               <section className="vx-item" key={it.id}>
-                <div className="vx-item-bar">
+                <div className="vx-item-head">
                   <span className="vx-item-name" title={it.name}>
                     {it.name}
                   </span>
-                  <span className="vx-item-meta">
-                    {it.dims ? `${it.dims.w}×${it.dims.h}` : ""}
-                  </span>
+                  {it.dims && (
+                    <span className="vx-item-dims">
+                      {it.dims.w} × {it.dims.h}
+                    </span>
+                  )}
                   {!processing && (
                     <button
-                      className="vx-ibtn"
-                      title="Remove"
+                      className="vx-remove"
+                      title="Remove document"
                       onClick={() => removeItem(it.id)}
                     >
-                      <X size={14} strokeWidth={2} />
+                      <X size={13} strokeWidth={2} />
                     </button>
                   )}
                 </div>
                 <div className="vx-compare">
                   <figure className="vx-pane">
-                    <figcaption className="vx-pane-h">
+                    <figcaption className="vx-pane-label">
                       <span>Original</span>
                     </figcaption>
-                    <div className="vx-pane-b">
+                    <div className="vx-pane-surface">
                       <img
                         src={it.originalUrl}
                         alt="Original"
@@ -700,20 +699,28 @@ export default function VertexScanner() {
                       />
                     </div>
                   </figure>
-                  <figure className="vx-pane">
-                    <figcaption className="vx-pane-h">
-                      <span className="vx-scanned">Scanned</span>
+                  <figure className="vx-pane vx-pane-scanned">
+                    <figcaption className="vx-pane-label">
+                      <span className={it.state === "done" ? "vx-scanned" : ""}>
+                        {it.state === "done"
+                          ? "Scanned"
+                          : it.state === "processing"
+                            ? "Scanning"
+                            : it.state === "error"
+                              ? "Error"
+                              : "Result"}
+                      </span>
                       {it.state === "done" && (
                         <button
-                          className="vx-ibtn sm"
+                          className="vx-pane-dl"
                           title="Download PDF"
                           onClick={() => downloadOne(it)}
                         >
-                          <FileDown size={13} strokeWidth={2} />
+                          <FileDown size={12} strokeWidth={2} />
                         </button>
                       )}
                     </figcaption>
-                    <div className="vx-pane-b">
+                    <div className="vx-pane-surface">
                       {it.state === "done" && (
                         <img
                           src={it.resultUrl}
@@ -752,11 +759,16 @@ export default function VertexScanner() {
                 </button>
                 {doneCount > 0 && (
                   <button
-                    className="vx-btn vx-btn-secondary"
+                    className="vx-btn vx-btn-secondary vx-btn-download"
                     onClick={downloadAll}
                     disabled={downloading}
                   >
-                    Download
+                    {downloading ? (
+                      <Loader2 size={14} className="vx-spin" strokeWidth={2} />
+                    ) : (
+                      <Download size={14} strokeWidth={2} />
+                    )}
+                    <span>{downloading ? "Preparing…" : "Download"}</span>
                   </button>
                 )}
                 <button className="vx-btn vx-btn-tertiary" onClick={reset}>
@@ -773,15 +785,22 @@ export default function VertexScanner() {
             {phase === "done" && (
               <>
                 <button
-                  className="vx-btn vx-btn-primary"
+                  className="vx-btn vx-btn-primary vx-btn-download"
                   onClick={downloadAll}
                   disabled={downloading || doneCount === 0}
                 >
-                  {downloading
-                    ? "Preparing…"
-                    : doneCount > 1
-                      ? `Download ${doneCount} PDFs`
-                      : "Download PDF"}
+                  {downloading ? (
+                    <Loader2 size={14} className="vx-spin" strokeWidth={2} />
+                  ) : (
+                    <Download size={14} strokeWidth={2} />
+                  )}
+                  <span>
+                    {downloading
+                      ? "Preparing…"
+                      : doneCount > 1
+                        ? `Download ${doneCount} PDFs`
+                        : "Download PDF"}
+                  </span>
                 </button>
                 <button
                   className="vx-btn vx-btn-secondary"
@@ -798,7 +817,9 @@ export default function VertexScanner() {
         </main>
       )}
 
-      <footer className="vx-footer">
+      <footer
+        className={`vx-footer ${view === "workspace" ? "vx-footer-quiet" : ""}`}
+      >
         <div className="vx-footer-in">
           <p className="vx-copy">
             © {year} Vertex — made for cleaner documents.
@@ -871,11 +892,12 @@ const CSS = `
 .vx-nav-r{display:flex; align-items:center; gap:2px;}
 .vx-link{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500; color:var(--muted); text-decoration:none; padding:5px 8px; border-radius:var(--radius); background:none; border:0; cursor:pointer; font-family:inherit; transition:color .1s, background .1s;}
 .vx-link:hover{color:var(--text); background:rgba(24,24,27,.05);}
-.vx-link:focus-visible, .vx-brand:focus-visible, .vx-back:focus-visible{outline:none; box-shadow:var(--ring); border-radius:var(--radius);}
+.vx-link:focus-visible, .vx-brand:focus-visible{outline:none; box-shadow:var(--ring); border-radius:var(--radius);}
 .vx-link-icon{color:var(--text-2);}
 @media (max-width:560px){ .vx-nav-r .vx-link:not(.vx-link-icon){display:none;} }
 
 .vx-main{flex:1; width:100%; max-width:1040px; margin:0 auto; padding:clamp(28px,5vw,44px) clamp(16px,4vw,32px) 48px;}
+.vx-main-ws{max-width:1180px; padding-top:clamp(16px,2.4vw,22px); padding-bottom:32px;}
 
 .vx-hero{max-width:580px; margin-bottom:clamp(24px,3.5vw,32px);}
 .vx-kicker{font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--accent); margin:0 0 10px;}
@@ -909,52 +931,65 @@ const CSS = `
 .vx-cell-h{font-size:13.5px; font-weight:600; color:var(--text); margin:0 0 6px; letter-spacing:-.01em;}
 .vx-cell-d{font-size:12.5px; line-height:1.6; color:var(--muted); margin:0;}
 
-.vx-back{display:inline-flex; align-items:center; gap:6px; background:none; border:0; cursor:pointer; color:var(--muted); font-family:inherit; font-size:12.5px; font-weight:500; padding:4px 0; margin-bottom:16px; transition:color .1s;}
-.vx-back:hover{color:var(--text);}
-.vx-ws-top{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; padding-bottom:14px; margin-bottom:18px; border-bottom:1px solid var(--border);}
-.vx-ws-h{font-size:16px; font-weight:600; letter-spacing:-.01em; margin:0;}
-.vx-ws-sub{font-size:12.5px; color:var(--muted); margin:4px 0 0;}
-.vx-stepper{display:flex; align-items:center; gap:14px; list-style:none; margin:0; padding:0;}
-.vx-st{font-size:12px; color:var(--faint); position:relative;}
-.vx-st.on{color:var(--accent); font-weight:600;}
-.vx-st.done{color:var(--muted);}
-.vx-st + .vx-st::before{content:""; position:absolute; left:-9px; top:50%; width:3px; height:3px; border-radius:50%; background:var(--border-2); transform:translateY(-50%);}
-@media (max-width:600px){ .vx-stepper{display:none;} }
+.vx-chrome{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:clamp(18px,3vw,28px);}
+.vx-chrome-back{display:inline-flex; align-items:baseline; gap:7px; background:none; border:0; cursor:pointer; color:var(--text-2); font-family:inherit; font-size:12.5px; font-weight:600; padding:2px 0; letter-spacing:-.005em; transition:color .12s ease;}
+.vx-chrome-back svg{align-self:center; color:var(--faint); transition:color .12s ease, transform .12s ease;}
+.vx-chrome-back:hover{color:var(--text);}
+.vx-chrome-back:hover svg{color:var(--text-2); transform:translateX(-1px);}
+.vx-chrome-back:focus-visible{outline:none; box-shadow:var(--ring); border-radius:var(--radius);}
+.vx-chrome-count{font-size:11.5px; font-weight:400; color:var(--faint);}
+.vx-steps{display:flex; align-items:center; gap:9px; list-style:none; margin:0; padding:0;}
+.vx-step{font-size:11px; color:var(--faint); letter-spacing:.01em; transition:color .12s ease;}
+.vx-step.on{color:var(--accent); font-weight:600;}
+.vx-step.done{color:var(--muted);}
+.vx-step + .vx-step{padding-left:9px; border-left:1px solid var(--border-2);}
+@media (max-width:600px){ .vx-steps{display:none;} }
 
 .vx-list{display:flex; flex-direction:column;}
-.vx-item + .vx-item{border-top:1px solid var(--border); margin-top:18px; padding-top:18px;}
-.vx-item-bar{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
-.vx-item-name{font-size:12.5px; font-weight:500; color:var(--text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.vx-item-meta{font-size:11.5px; color:var(--faint); font-variant-numeric:tabular-nums; flex:none;}
-.vx-ibtn{margin-left:auto; display:grid; place-items:center; width:24px; height:24px; cursor:pointer; background:var(--surface); border:1px solid var(--border-2); border-radius:var(--radius); color:var(--muted); transition:.1s;}
-.vx-ibtn:hover{color:var(--text); border-color:var(--faint);}
-.vx-ibtn:focus-visible{outline:none; box-shadow:var(--ring);}
-.vx-ibtn.sm{margin-left:auto; width:22px; height:22px; border:0; background:none;}
-.vx-ibtn.sm:hover{background:rgba(24,24,27,.06); color:var(--accent);}
+.vx-item + .vx-item{margin-top:clamp(28px,4vw,40px); padding-top:clamp(28px,4vw,40px); border-top:1px solid var(--border);}
+.vx-item-head{display:flex; align-items:baseline; gap:8px; margin-bottom:10px;}
+.vx-item-name{font-size:13px; font-weight:600; color:var(--text); letter-spacing:-.005em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.vx-item-dims{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; flex:none;}
+.vx-item-dims::before{content:"·"; margin-right:8px; color:var(--border-2);}
+.vx-remove{margin-left:auto; display:grid; place-items:center; width:22px; height:22px; cursor:pointer; background:none; border:0; border-radius:3px; color:var(--faint); opacity:.55; transition:opacity .12s ease, color .12s ease, background .12s ease; flex:none;}
+.vx-remove:hover{opacity:1; color:var(--danger); background:var(--danger-soft);}
+.vx-remove:focus-visible{outline:none; opacity:1; box-shadow:var(--ring);}
 
-.vx-compare{display:grid; grid-template-columns:1fr; gap:10px;}
-@media (min-width:760px){ .vx-compare{grid-template-columns:1fr 1fr;} }
-.vx-pane{margin:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;}
-.vx-pane-h{display:flex; align-items:center; height:32px; padding:0 10px; border-bottom:1px solid var(--border); font-size:11px; font-weight:500; color:var(--muted); letter-spacing:.01em; text-transform:uppercase;}
-.vx-scanned{color:var(--accent); font-weight:600;}
-.vx-pane-b{position:relative; height:clamp(280px,44vh,460px); background:var(--panel); display:flex; align-items:center; justify-content:center; padding:clamp(12px,2vw,20px);}
-.vx-doc{max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 0 1px rgba(16,16,20,.06),0 1px 3px rgba(16,16,20,.08);}
+.vx-compare{display:grid; grid-template-columns:1fr; gap:22px;}
+@media (min-width:760px){ .vx-compare{grid-template-columns:1fr 1fr; gap:0;} }
+.vx-pane{margin:0; min-width:0;}
+@media (min-width:760px){
+  .vx-pane{padding-right:26px;}
+  .vx-pane-scanned{padding-right:0; padding-left:26px; border-left:1px solid var(--border);}
+}
+.vx-pane-label{display:flex; align-items:center; gap:5px; margin-bottom:9px; font-size:10.5px; font-weight:600; color:var(--faint); letter-spacing:.06em; text-transform:uppercase;}
+.vx-scanned{display:inline-flex; align-items:center; gap:5px; color:var(--text-2); font-weight:600;}
+.vx-scanned::before{content:""; width:4px; height:4px; border-radius:50%; background:var(--accent); flex:none;}
+.vx-pane-dl{margin-left:auto; display:grid; place-items:center; width:20px; height:20px; border:0; background:none; border-radius:3px; color:var(--faint); cursor:pointer; opacity:.7; transition:opacity .12s ease, color .12s ease, background .12s ease;}
+.vx-pane-dl:hover{opacity:1; color:var(--accent); background:rgba(11,110,82,.08);}
+.vx-pane-dl:focus-visible{outline:none; opacity:1; box-shadow:var(--ring);}
+.vx-pane-surface{position:relative; height:clamp(360px,60vh,600px); display:flex; align-items:center; justify-content:center;}
+.vx-doc{max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 0 1px rgba(16,16,20,.07),0 1px 2px rgba(16,16,20,.05);}
 .vx-pane-note{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--faint);}
 .vx-pane-note.err{color:var(--danger);}
 .vx-skel{width:100%; height:100%; border-radius:2px; background:linear-gradient(100deg,#E8E8EA 40%,#F0F0F1 50%,#E8E8EA 60%); background-size:200% 100%; animation:vx-sh 1.25s ease-in-out infinite;}
 @keyframes vx-sh{to{background-position:-200% 0;}}
 
-.vx-actions{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:clamp(20px,2.5vw,28px); padding-top:16px; border-top:1px solid var(--border);}
-.vx-btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 13px; font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-.003em; border-radius:var(--radius); border:1px solid transparent; cursor:pointer; transition:.1s ease;}
+.vx-actions{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:clamp(22px,3vw,32px);}
+.vx-btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; height:30px; padding:0 12px; font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-.003em; border-radius:4px; border:1px solid transparent; cursor:pointer; transition:background .12s ease, border-color .12s ease, color .12s ease;}
 .vx-btn:focus-visible{outline:none; box-shadow:var(--ring);}
-.vx-btn-primary{background:var(--accent); color:#fff;}
+.vx-btn-primary{background:var(--accent); color:#fff; font-weight:600;}
 .vx-btn-primary:hover{background:var(--accent-ink);}
+.vx-btn-primary:active{background:var(--accent-ink);}
 .vx-btn-primary:disabled{opacity:.5; cursor:default;}
-.vx-btn-secondary{background:var(--surface); color:var(--text-2); border-color:var(--border-2);}
+.vx-btn-secondary{background:none; color:var(--muted); border-color:var(--border-2);}
 .vx-btn-secondary:hover{border-color:var(--faint); color:var(--text);}
 .vx-btn-secondary:disabled{opacity:.5; cursor:default;}
-.vx-btn-tertiary{background:none; color:var(--muted); padding:0 8px;}
-.vx-btn-tertiary:hover{color:var(--text); background:rgba(24,24,27,.05);}
+.vx-btn-tertiary{background:none; color:var(--faint); padding:0 4px; height:auto;}
+.vx-btn-tertiary:hover{color:var(--text);}
+.vx-btn-download{border-radius:6px; padding:0 14px; gap:7px; transition:background .12s ease, border-color .12s ease, color .12s ease, transform .05s ease;}
+.vx-btn-download:active:not(:disabled){transform:translateY(1px);}
+.vx-btn-download.vx-btn-primary:hover:not(:disabled){box-shadow:0 1px 2px rgba(7,90,66,.18);}
 .vx-progress{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2); font-variant-numeric:tabular-nums;}
 .vx-spin{animation:vx-rot .8s linear infinite; color:var(--accent);}
 @keyframes vx-rot{to{transform:rotate(360deg);}}
@@ -963,6 +998,11 @@ const CSS = `
 .vx-footer-in{max-width:1040px; margin:0 auto; padding:16px clamp(16px,4vw,32px); display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;}
 .vx-copy{font-size:12px; color:var(--faint); margin:0;}
 .vx-footer-links{display:flex; align-items:center; gap:4px;}
+.vx-footer-quiet{border-top-color:var(--border);}
+.vx-footer-quiet .vx-footer-in{padding-top:12px; padding-bottom:12px;}
+.vx-footer-quiet .vx-copy{font-size:11px; color:var(--border-2);}
+.vx-footer-quiet .vx-link{font-size:11px; color:var(--border-2);}
+.vx-footer-quiet .vx-link:hover{color:var(--muted); background:none;}
 
 @media (max-width:560px){
   .vx-actions .vx-btn{flex:1 1 auto;}
