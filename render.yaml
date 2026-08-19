@@ -19,7 +19,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://vertex-api-30ex.onrender.com/scan
+        value: https://vertex-api-lri2.onrender.com/scan
     routes:
       - type: rewrite
         source: /*
