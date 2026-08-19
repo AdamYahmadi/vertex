@@ -671,7 +671,9 @@ export default function VertexScanner() {
             {items.map((it) => (
               <section className="vx-item" key={it.id}>
                 <div className="vx-item-bar">
-                  <span className="vx-item-name">{it.name}</span>
+                  <span className="vx-item-name" title={it.name}>
+                    {it.name}
+                  </span>
                   <span className="vx-item-meta">
                     {it.dims ? `${it.dims.w}×${it.dims.h}` : ""}
                   </span>
@@ -869,6 +871,7 @@ const CSS = `
 .vx-nav-r{display:flex; align-items:center; gap:2px;}
 .vx-link{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500; color:var(--muted); text-decoration:none; padding:5px 8px; border-radius:var(--radius); background:none; border:0; cursor:pointer; font-family:inherit; transition:color .1s, background .1s;}
 .vx-link:hover{color:var(--text); background:rgba(24,24,27,.05);}
+.vx-link:focus-visible, .vx-brand:focus-visible, .vx-back:focus-visible{outline:none; box-shadow:var(--ring); border-radius:var(--radius);}
 .vx-link-icon{color:var(--text-2);}
 @media (max-width:560px){ .vx-nav-r .vx-link:not(.vx-link-icon){display:none;} }
 
@@ -918,12 +921,14 @@ const CSS = `
 .vx-st + .vx-st::before{content:""; position:absolute; left:-9px; top:50%; width:3px; height:3px; border-radius:50%; background:var(--border-2); transform:translateY(-50%);}
 @media (max-width:600px){ .vx-stepper{display:none;} }
 
-.vx-list{display:flex; flex-direction:column; gap:clamp(20px,2.5vw,28px);}
+.vx-list{display:flex; flex-direction:column;}
+.vx-item + .vx-item{border-top:1px solid var(--border); margin-top:18px; padding-top:18px;}
 .vx-item-bar{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
 .vx-item-name{font-size:12.5px; font-weight:500; color:var(--text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .vx-item-meta{font-size:11.5px; color:var(--faint); font-variant-numeric:tabular-nums; flex:none;}
 .vx-ibtn{margin-left:auto; display:grid; place-items:center; width:24px; height:24px; cursor:pointer; background:var(--surface); border:1px solid var(--border-2); border-radius:var(--radius); color:var(--muted); transition:.1s;}
 .vx-ibtn:hover{color:var(--text); border-color:var(--faint);}
+.vx-ibtn:focus-visible{outline:none; box-shadow:var(--ring);}
 .vx-ibtn.sm{margin-left:auto; width:22px; height:22px; border:0; background:none;}
 .vx-ibtn.sm:hover{background:rgba(24,24,27,.06); color:var(--accent);}
 
@@ -966,4 +971,3 @@ const CSS = `
 }
 @media (prefers-reduced-motion:reduce){ .vx-spin{animation-duration:1.6s;} .vx-skel{animation:none;} .vx-btn,.vx-link,.vx-drop{transition:none;} }
 `;
-
