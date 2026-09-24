@@ -1,4 +1,9 @@
-<h1 align="center">Vertex</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-lockup-dark.png">
+    <img alt="Vertex" src="assets/logo-lockup.png" width="208">
+  </picture>
+</p>
 
 <p align="center">
   Turn photos of paper documents into clean, scanner-quality PDFs — in the browser or from the command line.

@@ -5,6 +5,9 @@ output/
 *.jpeg
 *.png
 
+!assets/*.png
+!frontend/public/*.png
+
 # --- Environments & Virtualization ---
 .env
 .envrc
