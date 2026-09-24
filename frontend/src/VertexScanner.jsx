@@ -31,6 +31,37 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/scan";
 const MAX_SIDE = 1800;
 const IS_HOSTED = import.meta.env.VITE_HOSTED === "true";
 
+const HEALTH_URL = (() => {
+  try {
+    return new URL("/health", new URL(API_URL, window.location.href)).href;
+  } catch {
+    return "";
+  }
+})();
+const SCAN_TIMEOUT_MS = 120000;
+const WAKE_TIMEOUT_MS = 90000;
+const RETRY_DELAY_MS = 1500;
+
+let wakeInFlight = null;
+
+function wakeApi() {
+  if (!HEALTH_URL) return Promise.resolve();
+  if (!wakeInFlight) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), WAKE_TIMEOUT_MS);
+    wakeInFlight = fetch(HEALTH_URL, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .catch(() => {})
+      .then(() => {
+        clearTimeout(timer);
+        wakeInFlight = null;
+      });
+  }
+  return wakeInFlight;
+}
+
 const SCAN_MESSAGES = {
   413: "That image is too large. Try a smaller photo.",
   415: "Unsupported file type. Please upload a JPG or PNG.",
@@ -40,36 +71,69 @@ const SCAN_MESSAGES = {
   503: "The scanner is starting up. Please try again in a few seconds.",
 };
 
+const COLD_START_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+async function postScan(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const sep = API_URL.includes("?") ? "&" : "?";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
+  try {
+    return await fetch(`${API_URL}${sep}fmt=png`, {
+      method: "POST",
+      body: form,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function scanDocument(file) {
-  if (!USE_MOCK) {
-    const form = new FormData();
-    form.append("file", file);
-    const sep = API_URL.includes("?") ? "&" : "?";
+  if (USE_MOCK) return mockScan(file);
+
+  const attempts = 2;
+  let lastError;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const isLast = attempt === attempts - 1;
     let res;
     try {
-      res = await fetch(`${API_URL}${sep}fmt=png`, {
-        method: "POST",
-        body: form,
-      });
-    } catch {
-      throw new Error(
-        "Couldn't reach the scanner. Check your connection and try again.",
+      res = await postScan(file);
+    } catch (err) {
+      lastError = new Error(
+        err?.name === "AbortError"
+          ? "The scanner took too long to respond. Please try again."
+          : "Couldn't reach the scanner. Check your connection and try again.",
       );
+      if (isLast) throw lastError;
+      await wakeApi();
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
     }
-    if (!res.ok) {
-      let detail = "";
-      try {
-        detail = (await res.json())?.detail || "";
-      } catch {}
-      throw new Error(
-        detail ||
-          SCAN_MESSAGES[res.status] ||
-          "Something went wrong while scanning. Please try again.",
-      );
+
+    if (res.ok) return res.blob();
+
+    let detail = "";
+    try {
+      detail = (await res.json())?.detail || "";
+    } catch {}
+    lastError = new Error(
+      detail ||
+        SCAN_MESSAGES[res.status] ||
+        "Something went wrong while scanning. Please try again.",
+    );
+
+    if (!isLast && COLD_START_STATUSES.has(res.status)) {
+      await wakeApi();
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
     }
-    return res.blob();
+    throw lastError;
   }
-  return mockScan(file);
+
+  throw lastError;
 }
 
 function mockScan(file) {
@@ -358,6 +422,7 @@ export default function VertexScanner() {
         ACCEPT.includes(f.type),
       );
       if (!files.length) return;
+      if (!USE_MOCK) wakeApi();
       const created = files.map((file) => {
         const id = ++_id;
         const originalUrl = URL.createObjectURL(file);
@@ -474,6 +539,10 @@ export default function VertexScanner() {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!USE_MOCK) wakeApi();
+  }, []);
 
   const view = items.length === 0 ? "landing" : "workspace";
   useEffect(() => {
