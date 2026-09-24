@@ -20,6 +20,8 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://vertex-api-lri2.onrender.com/scan
+      - key: VITE_HOSTED
+        value: "true"
     routes:
       - type: rewrite
         source: /*

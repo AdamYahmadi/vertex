@@ -11,7 +11,6 @@ import {
   FileDown,
   ArrowLeft,
   AlertCircle,
-  Info,
 } from "lucide-react";
 
 const GitHubIcon = ({ size = 14 }) => (
@@ -23,6 +22,21 @@ const GitHubIcon = ({ size = 14 }) => (
     aria-hidden="true"
   >
     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 012-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" />
+  </svg>
+);
+
+const VertexMark = ({ size = 22 }) => (
+  <svg
+    className="vx-mark"
+    width={size}
+    height={size}
+    viewBox="0 0 64 64"
+    fill="var(--accent)"
+    aria-hidden="true"
+  >
+    <path d="M24.84 61.4 L33.14 53.92 L30.25 42.33 L21.95 49.81 Z" />
+    <path d="M20.97 45.89 L29.28 38.42 L24.88 20.8 L16.58 28.28 Z" />
+    <path d="M36.14 51.23 L39.83 47.9 L35.89 32.1 L47.42 21.71 L43.1 4.4 L27.88 18.1 Z" />
   </svg>
 );
 
@@ -73,9 +87,44 @@ const SCAN_MESSAGES = {
 
 const COLD_START_STATUSES = new Set([429, 500, 502, 503, 504]);
 
+async function downscale(file, maxSide) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    const longest = Math.max(img.width, img.height);
+    if (longest <= maxSide) return file;
+    const scale = maxSide / longest;
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise((res) =>
+      canvas.toBlob(res, "image/jpeg", 0.92),
+    );
+    if (!blob) return file;
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.jpg`, {
+      type: "image/jpeg",
+    });
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function postScan(file) {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", await downscale(file, MAX_SIDE));
   const sep = API_URL.includes("?") ? "&" : "?";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
@@ -408,6 +457,8 @@ export default function VertexScanner() {
   const [processing, setProcessing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [rescanTick, setRescanTick] = useState(0);
   const inputRef = useRef(null);
 
   const patch = useCallback((id, next) => {
@@ -484,6 +535,17 @@ export default function VertexScanner() {
     setProcessing(false);
   }, [items, patch]);
 
+  const rescanAll = useCallback(() => {
+    setRescanTick((t) => t + 1);
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.state !== "done") return it;
+        if (it.resultUrl) URL.revokeObjectURL(it.resultUrl);
+        return { ...it, state: "pending", resultBlob: null, resultUrl: null };
+      }),
+    );
+  }, []);
+
   const downloadAll = useCallback(async () => {
     const done = items.filter((i) => i.state === "done" && i.resultBlob);
     if (!done.length) return;
@@ -544,6 +606,23 @@ export default function VertexScanner() {
     if (!USE_MOCK) wakeApi();
   }, []);
 
+  const selected = items.find((i) => i.id === selectedId) || items[0] || null;
+
+  useEffect(() => {
+    if (items.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
+    }
+    if (!items.some((i) => i.id === selectedId)) setSelectedId(items[0].id);
+  }, [items, selectedId]);
+
+  const scanAllRef = useRef(scanAll);
+  scanAllRef.current = scanAll;
+
+  useEffect(() => {
+    if (rescanTick > 0) scanAllRef.current();
+  }, [rescanTick]);
+
   const view = items.length === 0 ? "landing" : "workspace";
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -556,7 +635,7 @@ export default function VertexScanner() {
     : items.every((i) => i.state === "done" || i.state === "error")
       ? "done"
       : "ready";
-  const stepIndex = phase === "done" ? 2 : 1;
+  const stepIndex = phase === "done" && doneCount > 0 ? 2 : 1;
   const year = new Date().getFullYear();
 
   const scrollToId = (id) => (e) => {
@@ -574,6 +653,7 @@ export default function VertexScanner() {
             className="vx-brand"
             onClick={view === "workspace" ? reset : undefined}
           >
+            <VertexMark size={25} />
             Vertex
           </button>
           <nav className="vx-nav-r">
@@ -609,86 +689,85 @@ export default function VertexScanner() {
 
       {view === "landing" && (
         <main className="vx-main">
-          <section className="vx-hero">
-            <p className="vx-kicker">Document scanner</p>
-            <h1 className="vx-h1">
-              Turn photos of paper into scanner-quality PDFs.
-            </h1>
-            <p className="vx-lead">
-              Vertex detects the document in a photo, corrects the perspective,
-              cleans the lighting, and exports a crisp PDF. It handles complex
-              backgrounds and any paper size, and never uploads your files to a
-              server.
-            </p>
-          </section>
-
-          <section className="vx-upload">
-            <div
-              className={`vx-drop ${dragging ? "is-drag" : ""}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-              onClick={() => inputRef.current?.click()}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  inputRef.current?.click();
-                }
-              }}
-            >
-              <span className="vx-drop-badge">
-                <UploadCloud size={20} strokeWidth={1.75} />
-              </span>
-              <p className="vx-drop-t">Drop documents to scan</p>
-              <p className="vx-drop-d">
-                or <span className="vx-drop-browse">browse files</span> — JPG or
-                PNG, multiple allowed
+          <div className="vx-top">
+            <section className="vx-hero">
+              <p className="vx-kicker">Document scanner</p>
+              <h1 className="vx-h1">
+                Turn photos of paper into scanner-quality PDFs.
+              </h1>
+              <p className="vx-lead">
+                Vertex detects the document in a photo, corrects the
+                perspective, cleans the lighting, and exports a crisp PDF. It
+                handles complex backgrounds and any paper size, and never
+                uploads your files to a server.
               </p>
-            </div>
-            {IS_HOSTED && (
-              <div className="vx-note">
-                <Info size={14} strokeWidth={2} className="vx-note-ic" />
-                <span>
-                  Running on a free server, Vertex uses a lightweight detection
-                  model and scales large images down to {MAX_SIDE}px for faster,
-                  more reliable scanning. For best results, photograph the page
-                  against a plain, uncluttered background. For full-resolution
-                  scans and the most accurate model, run the{" "}
+            </section>
+
+            <section className="vx-upload">
+              <div
+                className={`vx-drop ${dragging ? "is-drag" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+                onClick={() => inputRef.current?.click()}
+              >
+                <span className="vx-drop-badge">
+                  <UploadCloud size={22} strokeWidth={1.75} />
+                </span>
+                <p className="vx-drop-t">Drop documents to scan</p>
+                <button
+                  type="button"
+                  className="vx-cta-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    inputRef.current?.click();
+                  }}
+                >
+                  Choose photos
+                </button>
+                <p className="vx-drop-d">
+                  or drag and drop JPG or PNG files here
+                </p>
+              </div>
+              {IS_HOSTED && (
+                <div className="vx-note">
                   <a
                     className="vx-note-link"
-                    href="https://github.com/AdamYahmadi/vertex"
+                    href="https://github.com/AdamYahmadi/vertex#cli"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    local version on GitHub
+                    For the best results, use the Vertex CLI
+                    <span aria-hidden="true"> →</span>
                   </a>
-                  .
-                </span>
-              </div>
-            )}
-          </section>
+                  <p className="vx-note-d">
+                    It scans at full resolution with the most accurate model.
+                    The browser version uses a lightweight model and scales
+                    images to {MAX_SIDE}px for faster scanning — photograph
+                    pages against a plain background for the most reliable
+                    detection.
+                  </p>
+                </div>
+              )}
+            </section>
+          </div>
 
           <section className="vx-sec" id="how">
             <h2 className="vx-sec-h">How it works</h2>
-            <div className="vx-grid-3">
-              {HOW.map((s) => {
-                const Icon = s.icon;
-                return (
-                  <div className="vx-cell" key={s.t}>
-                    <span className="vx-cell-ic">
-                      <Icon size={18} strokeWidth={1.75} />
-                    </span>
-                    <h3 className="vx-cell-h">{s.t}</h3>
-                    <p className="vx-cell-d">{s.d}</p>
-                  </div>
-                );
-              })}
-            </div>
+            <ol className="vx-grid-3 vx-steps-list">
+              {HOW.map((s, i) => (
+                <li className="vx-stepc" key={s.t}>
+                  <span className="vx-stepc-n">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className="vx-cell-h">{s.t}</h3>
+                  <p className="vx-cell-d">{s.d}</p>
+                </li>
+              ))}
+            </ol>
           </section>
 
           <section className="vx-sec" id="features">
@@ -697,7 +776,7 @@ export default function VertexScanner() {
               {FEATURES.map((f) => {
                 const Icon = f.icon;
                 return (
-                  <div className="vx-cell" key={f.t}>
+                  <div className="vx-cell vx-card" key={f.t}>
                     <span className="vx-cell-ic">
                       <Icon size={18} strokeWidth={1.75} />
                     </span>
@@ -711,21 +790,22 @@ export default function VertexScanner() {
         </main>
       )}
 
-      {view === "workspace" && (
+      {view === "workspace" && selected && (
         <main className="vx-main vx-main-ws">
-          <div className="vx-chrome">
+          <div className="vx-ws-bar">
             <button className="vx-chrome-back" onClick={reset}>
               <ArrowLeft size={13} strokeWidth={2} />
               Documents
               <span className="vx-chrome-count">
-                {items.length} added{doneCount ? ` · ${doneCount} scanned` : ""}
+                {items.length} {items.length === 1 ? "document" : "documents"}
+                {doneCount ? ` · ${doneCount} scanned` : ""}
               </span>
             </button>
-            <ol className="vx-steps" aria-hidden="true">
+            <ol className="vx-flow" aria-label="Progress">
               {["Upload", "Scan", "Download"].map((label, i) => (
                 <li
                   key={label}
-                  className={`vx-step ${i < stepIndex ? "done" : i === stepIndex ? "on" : ""}`}
+                  className={`vx-flow-step ${i < stepIndex ? "done" : i === stepIndex ? "on" : ""}`}
                 >
                   {label}
                 </li>
@@ -733,155 +813,227 @@ export default function VertexScanner() {
             </ol>
           </div>
 
-          <div className="vx-list">
-            {items.map((it) => (
-              <section className="vx-item" key={it.id}>
-                <div className="vx-item-head">
-                  <span className="vx-item-name" title={it.name}>
-                    {it.name}
-                  </span>
-                  {it.dims && (
-                    <span className="vx-item-dims">
-                      {it.dims.w} × {it.dims.h}
-                    </span>
-                  )}
-                  {!processing && (
+          <section className="vx-ws">
+            <header className="vx-doc-head">
+              <div className="vx-doc-meta">
+                <span className="vx-doc-name" title={selected.name}>
+                  {selected.name}
+                </span>
+                <span className="vx-doc-sub">
+                  {selected.dims
+                    ? `${selected.dims.w} × ${selected.dims.h}`
+                    : "Reading size…"}
+                  {" · "}
+                  {(selected.name.split(".").pop() || "").toUpperCase()}
+                </span>
+              </div>
+              {items.length > 1 && (
+                <div
+                  className="vx-doc-switch"
+                  role="tablist"
+                  aria-label="Documents"
+                >
+                  {items.map((it, i) => (
                     <button
-                      className="vx-remove"
-                      title="Remove document"
-                      onClick={() => removeItem(it.id)}
+                      key={it.id}
+                      role="tab"
+                      aria-selected={it.id === selected.id}
+                      title={it.name}
+                      className={`vx-chip ${it.id === selected.id ? "on" : ""} ${
+                        it.state === "done" ? "ok" : ""
+                      }`}
+                      onClick={() => setSelectedId(it.id)}
                     >
-                      <X size={13} strokeWidth={2} />
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!processing && (
+                <button
+                  className="vx-remove"
+                  title="Remove document"
+                  onClick={() => removeItem(selected.id)}
+                >
+                  <X size={13} strokeWidth={2} />
+                </button>
+              )}
+            </header>
+
+            <div className="vx-compare">
+              <figure className="vx-pane">
+                <figcaption className="vx-pane-label">
+                  <span>Original</span>
+                </figcaption>
+                <div className="vx-pane-surface">
+                  <img
+                    src={selected.originalUrl}
+                    alt="Original"
+                    className="vx-doc"
+                  />
+                </div>
+              </figure>
+
+              <figure className="vx-pane">
+                <figcaption className="vx-pane-label">
+                  <span
+                    className={selected.state === "done" ? "vx-scanned" : ""}
+                  >
+                    {selected.state === "done"
+                      ? "Result"
+                      : selected.state === "processing"
+                        ? "Scanning"
+                        : selected.state === "error"
+                          ? "Error"
+                          : "Preview"}
+                  </span>
+                  {selected.state === "done" && (
+                    <button
+                      className="vx-pane-dl"
+                      title="Download this PDF"
+                      onClick={() => downloadOne(selected)}
+                    >
+                      <FileDown size={12} strokeWidth={2} />
                     </button>
                   )}
-                </div>
-                <div className="vx-compare">
-                  <figure className="vx-pane">
-                    <figcaption className="vx-pane-label">
-                      <span>Original</span>
-                    </figcaption>
-                    <div className="vx-pane-surface">
-                      <img
-                        src={it.originalUrl}
-                        alt="Original"
-                        className="vx-doc"
-                      />
-                    </div>
-                  </figure>
-                  <figure className="vx-pane vx-pane-scanned">
-                    <figcaption className="vx-pane-label">
-                      <span className={it.state === "done" ? "vx-scanned" : ""}>
-                        {it.state === "done"
-                          ? "Scanned"
-                          : it.state === "processing"
-                            ? "Scanning"
-                            : it.state === "error"
-                              ? "Error"
-                              : "Result"}
-                      </span>
-                      {it.state === "done" && (
-                        <button
-                          className="vx-pane-dl"
-                          title="Download PDF"
-                          onClick={() => downloadOne(it)}
-                        >
-                          <FileDown size={12} strokeWidth={2} />
-                        </button>
-                      )}
-                    </figcaption>
-                    <div className="vx-pane-surface">
-                      {it.state === "done" && (
-                        <img
-                          src={it.resultUrl}
-                          alt="Scanned"
-                          className="vx-doc"
-                        />
-                      )}
-                      {it.state === "processing" && <div className="vx-skel" />}
-                      {it.state === "pending" && (
-                        <span className="vx-pane-note">Not scanned yet</span>
-                      )}
-                      {it.state === "error" && (
-                        <span className="vx-pane-note err">
-                          <AlertCircle size={14} strokeWidth={2} /> {it.error}
-                        </span>
-                      )}
-                    </div>
-                  </figure>
-                </div>
-              </section>
-            ))}
-          </div>
-
-          <div className="vx-actions">
-            {phase === "ready" && (
-              <>
-                <button className="vx-btn vx-btn-primary" onClick={scanAll}>
-                  Scan{" "}
-                  {pendingCount > 1 ? `${pendingCount} documents` : "document"}
-                </button>
-                <button
-                  className="vx-btn vx-btn-secondary"
-                  onClick={() => inputRef.current?.click()}
-                >
-                  Add images
-                </button>
-                {doneCount > 0 && (
-                  <button
-                    className="vx-btn vx-btn-secondary vx-btn-download"
-                    onClick={downloadAll}
-                    disabled={downloading}
-                  >
-                    {downloading ? (
-                      <Loader2 size={14} className="vx-spin" strokeWidth={2} />
-                    ) : (
-                      <Download size={14} strokeWidth={2} />
-                    )}
-                    <span>{downloading ? "Preparing…" : "Download"}</span>
-                  </button>
-                )}
-                <button className="vx-btn vx-btn-tertiary" onClick={reset}>
-                  Clear
-                </button>
-              </>
-            )}
-            {phase === "processing" && (
-              <span className="vx-progress">
-                <Loader2 size={15} className="vx-spin" strokeWidth={2} />{" "}
-                Scanning {doneCount + 1} of {items.length}…
-              </span>
-            )}
-            {phase === "done" && (
-              <>
-                <button
-                  className="vx-btn vx-btn-primary vx-btn-download"
-                  onClick={downloadAll}
-                  disabled={downloading || doneCount === 0}
-                >
-                  {downloading ? (
-                    <Loader2 size={14} className="vx-spin" strokeWidth={2} />
-                  ) : (
-                    <Download size={14} strokeWidth={2} />
+                </figcaption>
+                <div className="vx-pane-surface">
+                  {selected.state === "done" && (
+                    <img
+                      src={selected.resultUrl}
+                      alt="Scanned"
+                      className="vx-doc"
+                    />
                   )}
-                  <span>
-                    {downloading
-                      ? "Preparing…"
-                      : doneCount > 1
-                        ? `Download ${doneCount} PDFs`
-                        : "Download PDF"}
-                  </span>
-                </button>
-                <button
-                  className="vx-btn vx-btn-secondary"
-                  onClick={() => inputRef.current?.click()}
-                >
-                  Add more
-                </button>
-                <button className="vx-btn vx-btn-tertiary" onClick={reset}>
-                  New batch
-                </button>
-              </>
-            )}
+                  {selected.state === "processing" && (
+                    <div className="vx-state">
+                      <Loader2 size={18} className="vx-spin" strokeWidth={2} />
+                      <p className="vx-state-d">
+                        Correcting perspective and lighting…
+                      </p>
+                    </div>
+                  )}
+                  {selected.state === "pending" && (
+                    <div className="vx-state">
+                      <ScanLine
+                        size={18}
+                        strokeWidth={1.75}
+                        className="vx-state-ic"
+                      />
+                      <p className="vx-state-t">Preview</p>
+                      <p className="vx-state-d">
+                        Your cleaned document will appear here after scanning.
+                      </p>
+                    </div>
+                  )}
+                  {selected.state === "error" && (
+                    <div className="vx-state">
+                      <AlertCircle
+                        size={18}
+                        strokeWidth={2}
+                        className="vx-state-ic err"
+                      />
+                      <p className="vx-state-t">Could not scan</p>
+                      <p className="vx-state-d">{selected.error}</p>
+                    </div>
+                  )}
+                </div>
+              </figure>
+            </div>
+          </section>
+
+          <div className="vx-ws-actions">
+            <span className="vx-ws-status">
+              {phase === "processing" ? (
+                <>
+                  <Loader2 size={14} className="vx-spin" strokeWidth={2} />
+                  Scanning {Math.min(doneCount + 1, items.length)} of{" "}
+                  {items.length}…
+                </>
+              ) : phase === "done" ? (
+                doneCount > 0 ? (
+                  `${doneCount} ${doneCount === 1 ? "document" : "documents"} scanned`
+                ) : (
+                  "Nothing scanned yet"
+                )
+              ) : (
+                `${pendingCount} ${pendingCount === 1 ? "image" : "images"} selected`
+              )}
+            </span>
+
+            <div className="vx-ws-buttons">
+              {phase === "ready" && (
+                <>
+                  <button className="vx-btn vx-btn-tertiary" onClick={reset}>
+                    Clear
+                  </button>
+                  <button
+                    className="vx-btn vx-btn-secondary"
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    Add images
+                  </button>
+                  <button className="vx-btn vx-btn-primary" onClick={scanAll}>
+                    Scan{" "}
+                    {pendingCount > 1
+                      ? `${pendingCount} documents`
+                      : "document"}
+                  </button>
+                </>
+              )}
+              {phase === "done" && (
+                <>
+                  <button className="vx-btn vx-btn-tertiary" onClick={reset}>
+                    Clear
+                  </button>
+                  <button
+                    className="vx-btn vx-btn-secondary"
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    Add images
+                  </button>
+                  {doneCount > 0 && (
+                    <button
+                      className="vx-btn vx-btn-secondary"
+                      onClick={rescanAll}
+                    >
+                      Scan again
+                    </button>
+                  )}
+                  {doneCount === 0 ? (
+                    <button
+                      className="vx-btn vx-btn-primary"
+                      onClick={rescanAll}
+                    >
+                      Try again
+                    </button>
+                  ) : (
+                    <button
+                      className="vx-btn vx-btn-primary vx-btn-download"
+                      onClick={downloadAll}
+                      disabled={downloading}
+                    >
+                      {downloading ? (
+                        <Loader2
+                          size={14}
+                          className="vx-spin"
+                          strokeWidth={2}
+                        />
+                      ) : (
+                        <Download size={14} strokeWidth={2} />
+                      )}
+                      <span>
+                        {downloading
+                          ? "Preparing…"
+                          : doneCount > 1
+                            ? `Download ${doneCount} PDFs`
+                            : "Download PDF"}
+                      </span>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </main>
       )}
@@ -944,7 +1096,7 @@ const CSS = `
   --border:#E4E4E7; --border-2:#D4D4D8;
   --accent:#0B6E52; --accent-ink:#075A42; --accent-soft:#EDF4F1;
   --danger:#B91C1C; --danger-soft:#FBEEEE;
-  --radius:5px;
+  --radius:5px; --radius-lg:12px;
   --ring:0 0 0 3px rgba(11,110,82,.18);
   color:var(--text); background:var(--bg); min-height:100%;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,sans-serif;
@@ -957,7 +1109,8 @@ const CSS = `
 
 .vx-nav{position:sticky; top:0; z-index:30; background:var(--bg); border-bottom:1px solid var(--border);}
 .vx-nav-in{max-width:1040px; margin:0 auto; height:48px; padding:0 clamp(16px,4vw,32px); display:flex; align-items:center; justify-content:space-between;}
-.vx-brand{background:none; border:0; padding:0; cursor:pointer; font-weight:600; font-size:14.5px; letter-spacing:-.01em; color:var(--text); font-family:inherit;}
+.vx-brand{display:inline-flex; align-items:center; gap:1px; background:none; border:0; padding:0; cursor:pointer; font-weight:600; font-size:14.5px; letter-spacing:-.01em; color:var(--text); font-family:inherit;}
+.vx-mark{display:block; flex:none;}
 .vx-nav-r{display:flex; align-items:center; gap:2px;}
 .vx-link{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500; color:var(--muted); text-decoration:none; padding:5px 8px; border-radius:var(--radius); background:none; border:0; cursor:pointer; font-family:inherit; transition:color .1s, background .1s;}
 .vx-link:hover{color:var(--text); background:rgba(24,24,27,.05);}
@@ -965,103 +1118,144 @@ const CSS = `
 .vx-link-icon{color:var(--text-2);}
 @media (max-width:560px){ .vx-nav-r .vx-link:not(.vx-link-icon){display:none;} }
 
-.vx-main{flex:1; width:100%; max-width:1040px; margin:0 auto; padding:clamp(28px,5vw,44px) clamp(16px,4vw,32px) 48px;}
+.vx-main{flex:1; width:100%; max-width:1040px; margin:0 auto; padding:clamp(36px,6vw,68px) clamp(16px,4vw,32px) clamp(48px,6vw,72px);}
 .vx-main-ws{max-width:1180px; padding-top:clamp(16px,2.4vw,22px); padding-bottom:32px;}
 
-.vx-hero{max-width:580px; margin-bottom:clamp(24px,3.5vw,32px);}
-.vx-kicker{font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--accent); margin:0 0 10px;}
-.vx-h1{font-size:clamp(22px,3vw,27px); font-weight:600; line-height:1.2; letter-spacing:-.02em; margin:0 0 12px; color:var(--text);}
-.vx-lead{font-size:13.5px; line-height:1.6; color:var(--muted); margin:0; max-width:60ch;}
+.vx-top{display:grid; grid-template-columns:minmax(0,1fr); gap:clamp(28px,4vw,40px); margin-bottom:clamp(30px,4.5vw,48px);}
+@media (min-width:900px){
+  .vx-top{grid-template-columns:minmax(0,1fr) 420px; gap:clamp(40px,5vw,72px); align-items:center;}
+}
+@media (min-width:1200px){ .vx-top{grid-template-columns:minmax(0,1fr) 440px;} }
 
-.vx-upload{margin-bottom:clamp(32px,5vw,52px);}
+.vx-hero{max-width:560px; min-width:0;}
+.vx-kicker{font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin:0 0 14px;}
+.vx-h1{font-size:clamp(28px,3.6vw,38px); font-weight:600; line-height:1.15; letter-spacing:-.022em; margin:0 0 16px; color:var(--text); text-wrap:balance;}
+.vx-lead{font-size:clamp(15px,1.5vw,16.5px); line-height:1.55; color:var(--text-2); margin:0; max-width:52ch;}
+
+.vx-upload{min-width:0;}
 .vx-drop{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
-  min-height:150px; padding:28px 24px; background:var(--surface);
-  border:1px dashed var(--border-2); border-radius:var(--radius); cursor:pointer;
+  min-height:230px; padding:36px 28px; background:var(--surface);
+  border:1px dashed var(--border-2); border-radius:var(--radius-lg); cursor:pointer;
   transition:border-color .12s, background .12s;}
 .vx-drop:hover{border-color:var(--accent); background:var(--accent-soft);}
 .vx-drop.is-drag{border-color:var(--accent); background:var(--accent-soft); border-style:solid;}
 .vx-drop:focus-visible{outline:none; border-color:var(--accent); box-shadow:var(--ring);}
-.vx-drop-badge{display:grid; place-items:center; width:28px; height:28px; margin-bottom:10px; color:var(--muted);}
+.vx-drop-badge{display:grid; place-items:center; width:30px; height:30px; margin-bottom:14px; color:var(--muted);}
 .vx-drop:hover .vx-drop-badge, .vx-drop.is-drag .vx-drop-badge{color:var(--accent);}
-.vx-drop-t{font-size:13.5px; font-weight:600; color:var(--text); margin:0 0 4px;}
-.vx-drop-d{font-size:12.5px; color:var(--muted); margin:0;}
-.vx-drop-browse{color:var(--accent); font-weight:500;}
-.vx-note{display:flex; align-items:flex-start; gap:8px; max-width:760px; margin:10px auto 0; padding:8px 10px; font-size:12px; line-height:1.55; color:var(--text-2); background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);}
-.vx-note-ic{flex:none; margin-top:1px; color:var(--muted);}
-.vx-note-link{color:var(--text); font-weight:600; text-decoration:underline; text-underline-offset:2px;}
+.vx-drop-t{font-size:16px; font-weight:600; letter-spacing:-.01em; color:var(--text); margin:0 0 18px;}
+.vx-cta-btn{font-family:inherit; font-size:13.5px; font-weight:600; letter-spacing:-.005em; color:#fff;
+  background:var(--accent); border:0; border-radius:6px; padding:10px 18px; cursor:pointer;
+  transition:background .12s ease;}
+.vx-cta-btn:hover{background:var(--accent-ink);}
+.vx-cta-btn:focus-visible{outline:none; box-shadow:var(--ring);}
+.vx-drop-d{font-size:13px; color:var(--muted); margin:14px 0 0;}
+.vx-note{margin:14px 2px 0;}
+.vx-note-link{display:inline-block; font-size:12.5px; font-weight:600; letter-spacing:-.005em; color:var(--accent); text-decoration:none;}
+.vx-note-link:hover{text-decoration:underline; text-underline-offset:2px;}
+.vx-note-link:focus-visible{outline:none; box-shadow:var(--ring); border-radius:3px;}
+.vx-note-d{margin:4px 0 0; font-size:12px; line-height:1.55; color:var(--muted);}
 
-.vx-sec{padding-top:clamp(24px,4vw,36px); border-top:1px solid var(--border);}
-.vx-sec + .vx-sec{margin-top:clamp(24px,4vw,36px);}
-.vx-sec-h{font-size:11.5px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--muted); margin:0 0 clamp(18px,2.5vw,24px);}
+.vx-sec{padding-top:clamp(28px,4vw,44px); border-top:1px solid var(--border);}
+.vx-sec + .vx-sec{margin-top:clamp(30px,4.5vw,48px);}
+.vx-sec-h{font-size:clamp(17px,2vw,20px); font-weight:600; line-height:1.3; letter-spacing:-.018em; color:var(--text); margin:0 0 clamp(22px,2.6vw,30px);}
 .vx-grid-3{display:grid; grid-template-columns:1fr; gap:clamp(20px,3vw,28px);}
 @media (min-width:720px){ .vx-grid-3{grid-template-columns:repeat(3,1fr); gap:32px;} }
 .vx-cell{min-width:0;}
-.vx-cell-ic{display:grid; place-items:center; width:20px; height:20px; color:var(--accent); margin-bottom:10px;}
-.vx-cell-h{font-size:13.5px; font-weight:600; color:var(--text); margin:0 0 6px; letter-spacing:-.01em;}
-.vx-cell-d{font-size:12.5px; line-height:1.6; color:var(--muted); margin:0;}
+.vx-steps-list{list-style:none; margin:0; padding:0;}
+.vx-stepc{min-width:0; padding-top:14px; border-top:1px solid var(--border-2);}
+.vx-stepc-n{display:block; margin-bottom:12px; font-size:11.5px; font-weight:600;
+  letter-spacing:.08em; color:var(--accent); font-variant-numeric:tabular-nums;}
+.vx-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:22px 20px;}
+.vx-cell-ic{display:grid; place-items:center; width:20px; height:20px; color:var(--accent); margin-bottom:12px;}
+.vx-cell-h{font-size:15px; font-weight:600; color:var(--text); margin:0 0 8px; letter-spacing:-.012em;}
+.vx-cell-d{font-size:14px; line-height:1.6; color:var(--muted); margin:0;}
 
-.vx-chrome{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:clamp(18px,3vw,28px);}
+.vx-ws-bar{display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding-bottom:12px; margin-bottom:clamp(16px,2.4vw,24px); border-bottom:1px solid var(--border);}
 .vx-chrome-back{display:inline-flex; align-items:baseline; gap:7px; background:none; border:0; cursor:pointer; color:var(--text-2); font-family:inherit; font-size:12.5px; font-weight:600; padding:2px 0; letter-spacing:-.005em; transition:color .12s ease;}
 .vx-chrome-back svg{align-self:center; color:var(--faint); transition:color .12s ease, transform .12s ease;}
 .vx-chrome-back:hover{color:var(--text);}
 .vx-chrome-back:hover svg{color:var(--text-2); transform:translateX(-1px);}
 .vx-chrome-back:focus-visible{outline:none; box-shadow:var(--ring); border-radius:var(--radius);}
 .vx-chrome-count{font-size:11.5px; font-weight:400; color:var(--faint);}
-.vx-steps{display:flex; align-items:center; gap:9px; list-style:none; margin:0; padding:0;}
-.vx-step{font-size:11px; color:var(--faint); letter-spacing:.01em; transition:color .12s ease;}
-.vx-step.on{color:var(--accent); font-weight:600;}
-.vx-step.done{color:var(--muted);}
-.vx-step + .vx-step{padding-left:9px; border-left:1px solid var(--border-2);}
-@media (max-width:600px){ .vx-steps{display:none;} }
 
-.vx-list{display:flex; flex-direction:column;}
-.vx-item + .vx-item{margin-top:clamp(28px,4vw,40px); padding-top:clamp(28px,4vw,40px); border-top:1px solid var(--border);}
-.vx-item-head{display:flex; align-items:baseline; gap:8px; margin-bottom:10px;}
-.vx-item-name{font-size:13px; font-weight:600; color:var(--text); letter-spacing:-.005em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.vx-item-dims{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; flex:none;}
-.vx-item-dims::before{content:"·"; margin-right:8px; color:var(--border-2);}
-.vx-remove{margin-left:auto; display:grid; place-items:center; width:22px; height:22px; cursor:pointer; background:none; border:0; border-radius:3px; color:var(--faint); opacity:.55; transition:opacity .12s ease, color .12s ease, background .12s ease; flex:none;}
+.vx-flow{display:flex; align-items:center; gap:7px; list-style:none; margin:0; padding:0; flex:none;}
+.vx-flow-step{display:inline-flex; align-items:center; font-size:11px; letter-spacing:.02em; color:var(--faint); transition:color .12s ease;}
+.vx-flow-step + .vx-flow-step::before{content:"→"; margin-right:7px; color:var(--border-2);}
+.vx-flow-step.done{color:var(--muted);}
+.vx-flow-step.on{color:var(--accent); font-weight:600;}
+@media (max-width:620px){ .vx-flow{display:none;} }
+
+.vx-ws{min-width:0;}
+.vx-doc-head{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
+.vx-doc-meta{flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:1px;}
+.vx-doc-name{font-size:14px; font-weight:600; line-height:1.35; color:var(--text); letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.vx-doc-sub{font-size:12px; line-height:1.35; color:var(--muted); font-variant-numeric:tabular-nums;}
+.vx-doc-switch{display:flex; align-items:center; gap:6px; flex:none;}
+.vx-chip{width:26px; height:26px; line-height:1; display:grid; place-items:center; font-family:inherit; font-size:11.5px; font-weight:600;
+  font-variant-numeric:tabular-nums; color:var(--muted); background:none; border:1px solid var(--border-2);
+  border-radius:4px; cursor:pointer; transition:color .12s ease, border-color .12s ease, background .12s ease;}
+.vx-chip:hover{color:var(--text); border-color:var(--faint);}
+.vx-chip:focus-visible{outline:none; box-shadow:var(--ring);}
+.vx-chip.ok{color:var(--accent); border-color:rgba(11,110,82,.35);}
+.vx-chip.on{color:#fff; background:var(--text-2); border-color:var(--text-2); box-shadow:0 0 0 3px rgba(24,24,27,.07);}
+.vx-chip.on.ok{background:var(--accent); border-color:var(--accent);}
+.vx-doc-head .vx-remove{margin-left:0;}
+.vx-remove{display:grid; place-items:center; width:24px; height:24px; cursor:pointer; background:none; border:0; border-radius:4px; color:var(--faint); opacity:.6; transition:opacity .12s ease, color .12s ease, background .12s ease; flex:none;}
 .vx-remove:hover{opacity:1; color:var(--danger); background:var(--danger-soft);}
 .vx-remove:focus-visible{outline:none; opacity:1; box-shadow:var(--ring);}
 
-.vx-compare{display:grid; grid-template-columns:1fr; gap:22px;}
-@media (min-width:760px){ .vx-compare{grid-template-columns:1fr 1fr; gap:0;} }
+.vx-compare{display:grid; grid-template-columns:minmax(0,1fr); gap:clamp(16px,2.4vw,24px);}
+@media (min-width:860px){ .vx-compare{grid-template-columns:repeat(2,minmax(0,1fr));} }
 .vx-pane{margin:0; min-width:0;}
-@media (min-width:760px){
-  .vx-pane{padding-right:26px;}
-  .vx-pane-scanned{padding-right:0; padding-left:26px; border-left:1px solid var(--border);}
-}
-.vx-pane-label{display:flex; align-items:center; gap:5px; margin-bottom:9px; font-size:10.5px; font-weight:600; color:var(--faint); letter-spacing:.06em; text-transform:uppercase;}
-.vx-scanned{display:inline-flex; align-items:center; gap:5px; color:var(--text-2); font-weight:600;}
-.vx-scanned::before{content:""; width:4px; height:4px; border-radius:50%; background:var(--accent); flex:none;}
-.vx-pane-dl{margin-left:auto; display:grid; place-items:center; width:20px; height:20px; border:0; background:none; border-radius:3px; color:var(--faint); cursor:pointer; opacity:.7; transition:opacity .12s ease, color .12s ease, background .12s ease;}
+.vx-pane-label{display:flex; align-items:center; gap:5px; min-height:22px; margin-bottom:8px; font-size:10.5px; font-weight:600; color:var(--faint); letter-spacing:.06em; text-transform:uppercase;}
+.vx-scanned{color:var(--accent); font-weight:600;}
+.vx-pane-dl{margin-left:auto; display:grid; place-items:center; width:22px; height:22px; border:0; background:none; border-radius:4px; color:var(--faint); cursor:pointer; opacity:.7; transition:opacity .12s ease, color .12s ease, background .12s ease;}
 .vx-pane-dl:hover{opacity:1; color:var(--accent); background:rgba(11,110,82,.08);}
 .vx-pane-dl:focus-visible{outline:none; opacity:1; box-shadow:var(--ring);}
-.vx-pane-surface{position:relative; height:clamp(360px,60vh,600px); display:flex; align-items:center; justify-content:center;}
+.vx-pane-surface{position:relative; display:flex; align-items:center; justify-content:center;
+  height:clamp(340px,54vh,600px); padding:12px; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--radius-lg);}
 .vx-doc{max-width:100%; max-height:100%; object-fit:contain; box-shadow:0 0 0 1px rgba(16,16,20,.07),0 1px 2px rgba(16,16,20,.05);}
-.vx-pane-note{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--faint);}
-.vx-pane-note.err{color:var(--danger);}
-.vx-skel{width:100%; height:100%; border-radius:2px; background:linear-gradient(100deg,#E8E8EA 40%,#F0F0F1 50%,#E8E8EA 60%); background-size:200% 100%; animation:vx-sh 1.25s ease-in-out infinite;}
-@keyframes vx-sh{to{background-position:-200% 0;}}
 
-.vx-actions{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:clamp(22px,3vw,32px);}
-.vx-btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; height:30px; padding:0 12px; font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-.003em; border-radius:4px; border:1px solid transparent; cursor:pointer; transition:background .12s ease, border-color .12s ease, color .12s ease;}
+.vx-state{display:flex; flex-direction:column; align-items:center; text-align:center; max-width:290px; padding:0 8px;}
+.vx-state-ic{color:var(--faint);}
+.vx-state-ic.err{color:var(--danger);}
+.vx-state-t{margin:11px 0 0; font-size:13px; font-weight:600; color:var(--text-2);}
+.vx-state .vx-spin + .vx-state-d{margin-top:12px;}
+.vx-state-d{margin:5px 0 0; font-size:12.5px; line-height:1.55; color:var(--muted);}
+.vx-state .vx-btn{margin-top:16px;}
+
+.vx-ws-actions{position:sticky; bottom:0; z-index:20; display:flex; align-items:center; gap:14px;
+  margin-top:clamp(16px,2.4vw,24px); padding:12px 0; background:var(--bg); border-top:1px solid var(--border);}
+.vx-ws-status{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-2); font-variant-numeric:tabular-nums;}
+.vx-ws-buttons{display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end;}
+
+.vx-btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 13px; font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-.003em; border-radius:6px; border:1px solid transparent; cursor:pointer; transition:background .12s ease, border-color .12s ease, color .12s ease;}
 .vx-btn:focus-visible{outline:none; box-shadow:var(--ring);}
 .vx-btn-primary{background:var(--accent); color:#fff; font-weight:600;}
-.vx-btn-primary:hover{background:var(--accent-ink);}
-.vx-btn-primary:active{background:var(--accent-ink);}
+.vx-btn-primary:hover:not(:disabled){background:var(--accent-ink);}
 .vx-btn-primary:disabled{opacity:.5; cursor:default;}
 .vx-btn-secondary{background:none; color:var(--muted); border-color:var(--border-2);}
 .vx-btn-secondary:hover{border-color:var(--faint); color:var(--text);}
 .vx-btn-secondary:disabled{opacity:.5; cursor:default;}
-.vx-btn-tertiary{background:none; color:var(--faint); padding:0 4px; height:auto;}
+.vx-btn-tertiary{background:none; color:var(--faint); padding:0 6px;}
 .vx-btn-tertiary:hover{color:var(--text);}
-.vx-btn-download{border-radius:6px; padding:0 14px; gap:7px; transition:background .12s ease, border-color .12s ease, color .12s ease, transform .05s ease;}
-.vx-btn-download:active:not(:disabled){transform:translateY(1px);}
-.vx-btn-download.vx-btn-primary:hover:not(:disabled){box-shadow:0 1px 2px rgba(7,90,66,.18);}
-.vx-progress{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2); font-variant-numeric:tabular-nums;}
+.vx-btn-download{gap:7px;}
 .vx-spin{animation:vx-rot .8s linear infinite; color:var(--accent);}
 @keyframes vx-rot{to{transform:rotate(360deg);}}
+
+@media (max-width:859px){
+  .vx-pane-surface{height:clamp(320px,46vh,460px);}
+}
+@media (max-width:620px){
+  .vx-ws-actions{flex-direction:column; align-items:stretch; gap:10px;}
+  .vx-ws-buttons{margin-left:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(104px,1fr)); gap:8px;}
+  .vx-ws-buttons .vx-btn-primary{grid-column:1 / -1; order:-1;}
+  .vx-ws-buttons .vx-btn-tertiary{order:9;}
+  .vx-btn{height:40px; padding:0 15px; font-size:13px;}
+  .vx-pane-surface{height:clamp(300px,44vh,400px);}
+}
 
 .vx-footer{border-top:1px solid var(--border);}
 .vx-footer-in{max-width:1040px; margin:0 auto; padding:16px clamp(16px,4vw,32px); display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;}
@@ -1069,8 +1263,8 @@ const CSS = `
 .vx-footer-links{display:flex; align-items:center; gap:4px;}
 .vx-footer-quiet{border-top-color:var(--border);}
 .vx-footer-quiet .vx-footer-in{padding-top:12px; padding-bottom:12px;}
-.vx-footer-quiet .vx-copy{font-size:11px; color:var(--border-2);}
-.vx-footer-quiet .vx-link{font-size:11px; color:var(--border-2);}
+.vx-footer-quiet .vx-copy{font-size:11px; color:var(--faint);}
+.vx-footer-quiet .vx-link{font-size:11px; color:var(--faint);}
 .vx-footer-quiet .vx-link:hover{color:var(--muted); background:none;}
 
 @media (max-width:560px){
